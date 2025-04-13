@@ -23,6 +23,7 @@ import {
   TOKEN_FUNCTIONS,
 } from '../utils/constants';
 import { MintDto } from './dto/mint.dto';
+import { ApproveDto } from './dto/approve.dto';
 
 dotenv.config();
 
@@ -188,6 +189,45 @@ export class TokenService {
       console.error(error);
       throw new BadRequestException(
         `${ERROR_MESSAGES.MINT_FAILED}: ${error?.shortMessage || error?.message}`,
+      );
+    }
+  }
+
+  async approve({ spender, amount, privateKey }: ApproveDto) {
+    this.checkAddress();
+
+    let account: Account;
+    try {
+      account = privateKeyToAccount(privateKey as `0x${string}`);
+    } catch {
+      throw new BadRequestException(ERROR_MESSAGES.INVALID_PRIVATE_KEY);
+    }
+
+    const parsedAmount = BigInt(parseUnits(amount, 18));
+    if (parsedAmount <= 0n) {
+      throw new BadRequestException(ERROR_MESSAGES.AMOUNT_ZERO_OR_NEGATIVE);
+    }
+
+    try {
+      const walletClient = createWalletClient({
+        account,
+        chain: hardhat,
+        transport: http(),
+      });
+
+      const hash = await walletClient.writeContract({
+        account,
+        abi,
+        address: CONTRACT_ADDRESS!,
+        functionName: TOKEN_FUNCTIONS.APPROVE,
+        args: [spender, parsedAmount],
+      });
+
+      return { hash };
+    } catch (error: any) {
+      console.error(error);
+      throw new BadRequestException(
+        `${ERROR_MESSAGES.TRANSFER_FAILED}: ${error?.shortMessage || error?.message}`,
       );
     }
   }

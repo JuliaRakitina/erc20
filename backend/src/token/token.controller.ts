@@ -10,7 +10,8 @@ import { TokenService } from './token.service';
 import { TransferDto } from './dto/transfer.dto';
 import { ApiTags, ApiOperation, ApiBody, ApiResponse } from '@nestjs/swagger';
 import { GetBalanceDto } from './dto/get-balance';
-import {MintDto} from "./dto/mint.dto";
+import { MintDto } from './dto/mint.dto';
+import { ApproveDto } from './dto/approve.dto';
 
 @ApiTags('Token')
 @Controller('token')
@@ -78,4 +79,18 @@ export class TokenController {
     return this.tokenService.mint(dto);
   }
 
+  @Post('approve')
+  @ApiOperation({ summary: 'Approve a spender to use tokens on your behalf' })
+  @ApiBody({ type: ApproveDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Approval successful',
+    schema: { example: { hash: '0x123...' } },
+  })
+  approve(
+    @Body(new ValidationPipe({ transform: true }))
+    dto: ApproveDto,
+  ) {
+    return this.tokenService.approve(dto);
+  }
 }

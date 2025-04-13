@@ -25,6 +25,7 @@ export const TOKEN_FUNCTIONS = {
     BALANCE_OF: 'balanceOf',
     TRANSFER: 'transfer',
     MINT: 'mint',
+    APPROVE: 'approve',
 };
 
 export const ERROR_MESSAGES = {
