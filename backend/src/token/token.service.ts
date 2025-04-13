@@ -1,5 +1,15 @@
-import {BadRequestException, Injectable, NotFoundException} from '@nestjs/common';
-import { createPublicClient, createWalletClient, http, parseUnits } from 'viem';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import {
+  Account,
+  createPublicClient,
+  createWalletClient,
+  http,
+  parseUnits,
+} from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { hardhat } from 'viem/chains';
 import { abi } from './abi/jtoken-abi';
@@ -12,10 +22,9 @@ import {
   ERROR_MESSAGES,
   TOKEN_FUNCTIONS,
 } from '../utils/constants';
+import { MintDto } from './dto/mint.dto';
 
 dotenv.config();
-
-const contractAddress = CONTRACT_ADDRESS;
 
 @Injectable()
 export class TokenService {
@@ -81,24 +90,78 @@ export class TokenService {
         balance: (balance as bigint).toString(),
       };
     } catch (error: any) {
-      throw new BadRequestException(
-          `Invalid or unrecognized address: ${address}`,
-      );
+      throw new BadRequestException(ERROR_MESSAGES.INVALID_ADDRESS(address));
     }
   }
 
   async transferFrom({
-    from,
     to,
     amount,
     privateKey,
   }: {
-    from: `0x${string}`;
     to: `0x${string}`;
     amount: string;
     privateKey: `0x${string}`;
   }) {
-    const account = privateKeyToAccount(privateKey);
+    this.checkAddress();
+
+    try {
+      const account = privateKeyToAccount(privateKey);
+      const from = account.address;
+
+      if (to.toLowerCase() === from.toLowerCase()) {
+        throw new BadRequestException(ERROR_MESSAGES.SAME_ADDRESS_TRANSFER);
+      }
+
+      const parsedAmount = BigInt(parseUnits(amount, 18));
+      if (parsedAmount <= 0n) {
+        throw new BadRequestException(ERROR_MESSAGES.AMOUNT_ZERO_OR_NEGATIVE);
+      }
+
+      const balanceRaw = await this.publicClient.readContract({
+        abi,
+        address: CONTRACT_ADDRESS!,
+        functionName: TOKEN_FUNCTIONS.BALANCE_OF,
+        args: [from],
+      });
+
+      const senderBalance = balanceRaw as bigint;
+
+      if (senderBalance < parsedAmount) {
+        throw new BadRequestException(ERROR_MESSAGES.INSUFFICIENT_BALANCE);
+      }
+
+      const walletClient = createWalletClient({
+        account,
+        chain: hardhat,
+        transport: http(),
+      });
+
+      const hash = await walletClient.writeContract({
+        abi,
+        address: CONTRACT_ADDRESS!,
+        functionName: TOKEN_FUNCTIONS.TRANSFER,
+        args: [to, parsedAmount],
+      });
+
+      return { hash };
+    } catch (error: any) {
+      console.error(error);
+      throw new BadRequestException(
+        `${ERROR_MESSAGES.TRANSFER_FAILED}: ${error?.shortMessage || error?.message}`,
+      );
+    }
+  }
+
+  async mint({ to, amount, privateKey }: MintDto) {
+    this.checkAddress();
+
+    let account: Account;
+    try {
+      account = privateKeyToAccount(privateKey as `0x${string}`);
+    } catch (e: any) {
+      throw new BadRequestException(ERROR_MESSAGES.INVALID_PRIVATE_KEY);
+    }
 
     const walletClient = createWalletClient({
       account,
@@ -106,13 +169,26 @@ export class TokenService {
       transport: http(),
     });
 
-    const hash = await walletClient.writeContract({
-      abi,
-      address: contractAddress,
-      functionName: TOKEN_FUNCTIONS.TRANSFER,
-      args: [to, parseUnits(amount, 18)],
-    });
+    const parsedAmount = BigInt(parseUnits(amount, 18));
+    if (parsedAmount <= 0n) {
+      throw new BadRequestException(ERROR_MESSAGES.AMOUNT_ZERO_OR_NEGATIVE);
+    }
 
-    return { hash };
+    try {
+      const hash = await walletClient.writeContract({
+        account,
+        abi,
+        address: CONTRACT_ADDRESS!,
+        functionName: TOKEN_FUNCTIONS.MINT,
+        args: [to, parsedAmount],
+      });
+
+      return { hash };
+    } catch (error: any) {
+      console.error(error);
+      throw new BadRequestException(
+        `${ERROR_MESSAGES.MINT_FAILED}: ${error?.shortMessage || error?.message}`,
+      );
+    }
   }
 }

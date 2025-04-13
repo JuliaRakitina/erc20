@@ -1,13 +1,16 @@
-import {Controller, Get, Post, Body, Query, ValidationPipe} from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Query,
+  ValidationPipe,
+} from '@nestjs/common';
 import { TokenService } from './token.service';
 import { TransferDto } from './dto/transfer.dto';
-import {
-  ApiTags,
-  ApiOperation,
-  ApiBody,
-  ApiResponse,
-} from '@nestjs/swagger';
-import {GetBalanceDto} from "./dto/get-balance";
+import { ApiTags, ApiOperation, ApiBody, ApiResponse } from '@nestjs/swagger';
+import { GetBalanceDto } from './dto/get-balance';
+import {MintDto} from "./dto/mint.dto";
 
 @ApiTags('Token')
 @Controller('token')
@@ -40,14 +43,39 @@ export class TokenController {
 
   @Post('transfer')
   @ApiOperation({ summary: 'Transfer tokens from one address to another' })
+  @ApiResponse({
+    status: 200,
+    description: 'Transfer successful',
+    schema: {
+      example: {
+        hash: '0xabcdef1234567890deadbeef...',
+      },
+    },
+  })
   @ApiBody({ type: TransferDto })
-  @ApiResponse({ status: 200, description: 'Transfer successful' })
-  transfer(@Body() dto: TransferDto) {
+  transfer(
+    @Body(new ValidationPipe({ transform: true }))
+    dto: TransferDto,
+  ) {
     return this.tokenService.transferFrom({
-      from: dto.from as `0x${string}`,
       to: dto.to as `0x${string}`,
-      privateKey: dto.privateKey as `0x${string}`,
       amount: dto.amount,
+      privateKey: dto.privateKey as `0x${string}`,
     });
   }
+
+  @Post('mint')
+  @ApiOperation({ summary: 'Mint tokens (only owner)' })
+  @ApiBody({ type: MintDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Mint successful',
+    schema: {
+      example: { hash: '0x123...' },
+    },
+  })
+  mint(@Body(new ValidationPipe({ transform: true })) dto: MintDto) {
+    return this.tokenService.mint(dto);
+  }
+
 }
