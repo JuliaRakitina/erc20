@@ -13,6 +13,7 @@ import { GetBalanceDto } from './dto/get-balance';
 import { MintDto } from './dto/mint.dto';
 import { ApproveDto } from './dto/approve.dto';
 import {GetAllowanceDto} from "./dto/get-allowance.dto";
+import {TransferFromDto} from "./dto/transfer-from.dto";
 
 @ApiTags('Token')
 @Controller('token')
@@ -111,6 +112,21 @@ export class TokenController {
         query.spender as `0x${string}`,
     );
   }
+
+  @Post('transfer-from')
+  @ApiOperation({ summary: 'Transfer tokens using allowance from owner to recipient' })
+  @ApiBody({ type: TransferFromDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Transfer successful',
+    schema: { example: { hash: '0x123...' } },
+  })
+  transferFromBySpender(
+      @Body(new ValidationPipe({ transform: true })) dto: TransferFromDto,
+  ) {
+    return this.tokenService.transferFromBySpender(dto);
+  }
+
 
 
 }

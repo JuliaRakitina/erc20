@@ -27,6 +27,7 @@ export const TOKEN_FUNCTIONS = {
     MINT: 'mint',
     APPROVE: 'approve',
     ALLOWANCE: 'allowance',
+    TRANSFER_FROM: 'transferFrom',
 };
 
 export const ERROR_MESSAGES = {
@@ -37,6 +38,8 @@ export const ERROR_MESSAGES = {
     INSUFFICIENT_BALANCE: 'Sender does not have enough tokens',
     TRANSFER_FAILED: 'Transfer failed',
     MINT_FAILED: 'Mint failed',
+    ALLOWANCE_TOO_LOW: 'Allowance to low',
+    NOT_ENOUGH_TOKENS : 'Owner does not have enough tokens',
     INVALID_ADDRESS: (address: string) =>
         `Invalid or unrecognized address: ${address}`,
 };

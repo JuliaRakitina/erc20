@@ -24,6 +24,7 @@ import {
 } from '../utils/constants';
 import { MintDto } from './dto/mint.dto';
 import { ApproveDto } from './dto/approve.dto';
+import { TransferFromDto } from './dto/transfer-from.dto';
 
 dotenv.config();
 
@@ -246,8 +247,75 @@ export class TokenService {
       return { allowance: (allowance as bigint).toString() };
     } catch (error: any) {
       console.error(error);
-      throw new BadRequestException(ERROR_MESSAGES.INVALID_ADDRESS(`${owner}, ${spender}`));
+      throw new BadRequestException(
+        ERROR_MESSAGES.INVALID_ADDRESS(`${owner}, ${spender}`),
+      );
     }
   }
 
+  async transferFromBySpender({
+    from,
+    to,
+    amount,
+    privateKey,
+  }: TransferFromDto) {
+    this.checkAddress();
+
+    let spender;
+    try {
+      spender = privateKeyToAccount(privateKey as `0x${string}`);
+    } catch {
+      throw new BadRequestException(ERROR_MESSAGES.INVALID_PRIVATE_KEY);
+    }
+
+    const parsedAmount = BigInt(parseUnits(amount, 18));
+    if (parsedAmount <= 0n) {
+      throw new BadRequestException(ERROR_MESSAGES.AMOUNT_ZERO_OR_NEGATIVE);
+    }
+
+    const [allowance, ownerBalance] = await Promise.all([
+      this.publicClient.readContract({
+        abi,
+        address: CONTRACT_ADDRESS!,
+        functionName: TOKEN_FUNCTIONS.ALLOWANCE,
+        args: [from, spender.address],
+      }),
+      this.publicClient.readContract({
+        abi,
+        address: CONTRACT_ADDRESS!,
+        functionName: TOKEN_FUNCTIONS.BALANCE_OF,
+        args: [from],
+      }),
+    ]);
+
+    if ((allowance as bigint) < parsedAmount) {
+      throw new BadRequestException(ERROR_MESSAGES.ALLOWANCE_TOO_LOW);
+    }
+
+    if ((ownerBalance as bigint) < parsedAmount) {
+      throw new BadRequestException(ERROR_MESSAGES.NOT_ENOUGH_TOKENS);
+    }
+
+    const walletClient = createWalletClient({
+      account: spender,
+      chain: hardhat,
+      transport: http(),
+    });
+
+    try {
+      const hash = await walletClient.writeContract({
+        account: spender,
+        abi,
+        address: CONTRACT_ADDRESS!,
+        functionName: TOKEN_FUNCTIONS.TRANSFER_FROM,
+        args: [from, to, parsedAmount],
+      });
+
+      return { hash };
+    } catch (error: any) {
+      throw new BadRequestException(
+        `${ERROR_MESSAGES.TRANSFER_FAILED}: ${error?.shortMessage || error?.message}`,
+      );
+    }
+  }
 }
