@@ -26,6 +26,7 @@ export const TOKEN_FUNCTIONS = {
     TRANSFER: 'transfer',
     MINT: 'mint',
     APPROVE: 'approve',
+    ALLOWANCE: 'allowance',
 };
 
 export const ERROR_MESSAGES = {

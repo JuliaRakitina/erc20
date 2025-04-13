@@ -231,4 +231,23 @@ export class TokenService {
       );
     }
   }
+
+  async getAllowance(owner: `0x${string}`, spender: `0x${string}`) {
+    this.checkAddress();
+
+    try {
+      const allowance = await this.publicClient.readContract({
+        abi,
+        address: CONTRACT_ADDRESS!,
+        functionName: TOKEN_FUNCTIONS.ALLOWANCE,
+        args: [owner, spender],
+      });
+
+      return { allowance: (allowance as bigint).toString() };
+    } catch (error: any) {
+      console.error(error);
+      throw new BadRequestException(ERROR_MESSAGES.INVALID_ADDRESS(`${owner}, ${spender}`));
+    }
+  }
+
 }

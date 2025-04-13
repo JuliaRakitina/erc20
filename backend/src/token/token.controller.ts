@@ -8,10 +8,11 @@ import {
 } from '@nestjs/common';
 import { TokenService } from './token.service';
 import { TransferDto } from './dto/transfer.dto';
-import { ApiTags, ApiOperation, ApiBody, ApiResponse } from '@nestjs/swagger';
+import {ApiTags, ApiOperation, ApiBody, ApiResponse, ApiQuery} from '@nestjs/swagger';
 import { GetBalanceDto } from './dto/get-balance';
 import { MintDto } from './dto/mint.dto';
 import { ApproveDto } from './dto/approve.dto';
+import {GetAllowanceDto} from "./dto/get-allowance.dto";
 
 @ApiTags('Token')
 @Controller('token')
@@ -93,4 +94,23 @@ export class TokenController {
   ) {
     return this.tokenService.approve(dto);
   }
+
+  @Get('allowance')
+  @ApiOperation({ summary: 'Check how many tokens a spender is allowed to use' })
+  @ApiResponse({
+    status: 200,
+    schema: {
+      example: { allowance: '5000000000000000000' },
+    },
+  })
+  getAllowance(
+      @Query(new ValidationPipe({ transform: true })) query: GetAllowanceDto,
+  ) {
+    return this.tokenService.getAllowance(
+        query.owner as `0x${string}`,
+        query.spender as `0x${string}`,
+    );
+  }
+
+
 }
