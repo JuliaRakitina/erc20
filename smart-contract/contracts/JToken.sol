@@ -11,7 +11,7 @@ contract JToken is ERC20, Ownable {
     ERC20("JToken", "JTK")
     Ownable(msg.sender)
     {
-        _mint(msg.sender, initialSupply * (10 ** uint256(_decimals)));
+        _mint(msg.sender, initialSupply);
     }
 
     function decimals() public pure override returns (uint8) {
