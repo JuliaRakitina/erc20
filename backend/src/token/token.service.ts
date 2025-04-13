@@ -1,10 +1,17 @@
-import { Injectable } from '@nestjs/common';
+import {BadRequestException, Injectable, NotFoundException} from '@nestjs/common';
 import { createPublicClient, createWalletClient, http, parseUnits } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { hardhat } from 'viem/chains';
 import { abi } from './abi/jtoken-abi';
+import { from, combineLatest } from 'rxjs';
+import { map } from 'rxjs/operators';
 import * as dotenv from 'dotenv';
-import { CONTRACT_ADDRESS } from '../utils/constants';
+import {
+  CONTRACT_ADDRESS,
+  DEFAULT_ADDRESS,
+  ERROR_MESSAGES,
+  TOKEN_FUNCTIONS,
+} from '../utils/constants';
 
 dotenv.config();
 
@@ -17,35 +24,67 @@ export class TokenService {
     transport: http(),
   });
 
-  async getTokenInfo() {
-    const [name, symbol, totalSupply] = await Promise.all([
-      this.publicClient.readContract({
-        abi,
-        address: contractAddress,
-        functionName: 'name',
-      }),
-      this.publicClient.readContract({
-        abi,
-        address: contractAddress,
-        functionName: 'symbol',
-      }),
-      this.publicClient.readContract({
-        abi,
-        address: contractAddress,
-        functionName: 'totalSupply',
-      }),
-    ]);
+  private checkAddress() {
+    if (!CONTRACT_ADDRESS || CONTRACT_ADDRESS === DEFAULT_ADDRESS) {
+      throw new NotFoundException(ERROR_MESSAGES.CONTRACT_MISSING);
+    }
+  }
 
-    return { name, symbol, totalSupply };
+  getTokenInfo() {
+    this.checkAddress();
+
+    const name$ = from(
+      this.publicClient.readContract({
+        abi,
+        address: CONTRACT_ADDRESS!,
+        functionName: TOKEN_FUNCTIONS.NAME,
+      }),
+    );
+
+    const symbol$ = from(
+      this.publicClient.readContract({
+        abi,
+        address: CONTRACT_ADDRESS!,
+        functionName: TOKEN_FUNCTIONS.SYMBOL,
+      }),
+    );
+
+    const supply$ = from(
+      this.publicClient.readContract({
+        abi,
+        address: CONTRACT_ADDRESS!,
+        functionName: TOKEN_FUNCTIONS.TOTAL_SUPPLY,
+      }) as Promise<bigint>,
+    );
+
+    return combineLatest([name$, symbol$, supply$]).pipe(
+      map(([name, symbol, totalSupply]) => ({
+        name,
+        symbol,
+        totalSupply: totalSupply.toString(),
+      })),
+    );
   }
 
   async getBalanceOf(address: `0x${string}`) {
-    return await this.publicClient.readContract({
-      abi,
-      address: contractAddress,
-      functionName: 'balanceOf',
-      args: [address],
-    });
+    this.checkAddress();
+
+    try {
+      const balance = await this.publicClient.readContract({
+        abi,
+        address: CONTRACT_ADDRESS!,
+        functionName: TOKEN_FUNCTIONS.BALANCE_OF,
+        args: [address],
+      });
+
+      return {
+        balance: (balance as bigint).toString(),
+      };
+    } catch (error: any) {
+      throw new BadRequestException(
+          `Invalid or unrecognized address: ${address}`,
+      );
+    }
   }
 
   async transferFrom({
@@ -70,7 +109,7 @@ export class TokenService {
     const hash = await walletClient.writeContract({
       abi,
       address: contractAddress,
-      functionName: 'transfer',
+      functionName: TOKEN_FUNCTIONS.TRANSFER,
       args: [to, parseUnits(amount, 18)],
     });
 
