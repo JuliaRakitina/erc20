@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import {
   Account,
+  Abi,
   createPublicClient,
   createWalletClient,
   http,
@@ -12,58 +13,74 @@ import {
 } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { hardhat } from 'viem/chains';
-import { abi } from './abi/jtoken-abi';
 import { from, combineLatest } from 'rxjs';
 import { map } from 'rxjs/operators';
-import * as dotenv from 'dotenv';
+import * as fs from 'fs';
+import * as path from 'path';
+
 import {
-  CONTRACT_ADDRESS,
-  DEFAULT_ADDRESS,
+  ABI_FILE,
+  CONTRACT_ADDRESS_FILE,
   ERROR_MESSAGES,
+  PUBLIC_CLIENT_URL,
+  SHARED_PATH,
   TOKEN_FUNCTIONS,
 } from '../utils/constants';
+
 import { MintDto } from './dto/mint.dto';
 import { ApproveDto } from './dto/approve.dto';
 import { TransferFromDto } from './dto/transfer-from.dto';
 
-dotenv.config();
-
 @Injectable()
 export class TokenService {
+  private readonly sharedPath = SHARED_PATH;
+
+  private readonly abi: Abi = this.loadAbi();
+  private readonly contractAddress = this.loadAddress();
+
   private readonly publicClient = createPublicClient({
     chain: hardhat,
-    transport: http(),
+    transport: http(PUBLIC_CLIENT_URL),
   });
 
-  private checkAddress() {
-    if (!CONTRACT_ADDRESS || CONTRACT_ADDRESS === DEFAULT_ADDRESS) {
-      throw new NotFoundException(ERROR_MESSAGES.CONTRACT_MISSING);
+  private loadAbi() {
+    const filePath = path.join(this.sharedPath, ABI_FILE);
+    if (!fs.existsSync(filePath)) {
+      throw new NotFoundException(ERROR_MESSAGES.ABI_NOT_FOUND);
     }
+    return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+  }
+
+  private loadAddress(): `0x${string}` {
+    const filePath = path.join(this.sharedPath, CONTRACT_ADDRESS_FILE);
+    if (!fs.existsSync(filePath)) {
+      throw new NotFoundException(ERROR_MESSAGES.CONTRACT_ADDRESS_MISSING);
+    }
+    const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    return data.address;
   }
 
   getTokenInfo() {
-    this.checkAddress();
-
     const name$ = from(
       this.publicClient.readContract({
-        abi,
-        address: CONTRACT_ADDRESS!,
+        abi: this.abi,
+        address: this.contractAddress,
         functionName: TOKEN_FUNCTIONS.NAME,
       }),
     );
 
     const symbol$ = from(
       this.publicClient.readContract({
-        abi,
-        address: CONTRACT_ADDRESS!,
+        abi: this.abi,
+        address: this.contractAddress,
         functionName: TOKEN_FUNCTIONS.SYMBOL,
       }),
     );
 
     const supply$ = from(
       this.publicClient.readContract({
-        abi,
-        address: CONTRACT_ADDRESS!,
+        abi: this.abi,
+        address: this.contractAddress,
         functionName: TOKEN_FUNCTIONS.TOTAL_SUPPLY,
       }) as Promise<bigint>,
     );
@@ -78,12 +95,10 @@ export class TokenService {
   }
 
   async getBalanceOf(address: `0x${string}`) {
-    this.checkAddress();
-
     try {
       const balance = await this.publicClient.readContract({
-        abi,
-        address: CONTRACT_ADDRESS!,
+        abi: this.abi,
+        address: this.contractAddress,
         functionName: TOKEN_FUNCTIONS.BALANCE_OF,
         args: [address],
       });
@@ -105,8 +120,6 @@ export class TokenService {
     amount: string;
     privateKey: `0x${string}`;
   }) {
-    this.checkAddress();
-
     try {
       const account = privateKeyToAccount(privateKey);
       const from = account.address;
@@ -121,8 +134,8 @@ export class TokenService {
       }
 
       const balanceRaw = await this.publicClient.readContract({
-        abi,
-        address: CONTRACT_ADDRESS!,
+        abi: this.abi,
+        address: this.contractAddress,
         functionName: TOKEN_FUNCTIONS.BALANCE_OF,
         args: [from],
       });
@@ -140,8 +153,8 @@ export class TokenService {
       });
 
       const hash = await walletClient.writeContract({
-        abi,
-        address: CONTRACT_ADDRESS!,
+        abi: this.abi,
+        address: this.contractAddress,
         functionName: TOKEN_FUNCTIONS.TRANSFER,
         args: [to, parsedAmount],
       });
@@ -156,8 +169,6 @@ export class TokenService {
   }
 
   async mint({ to, amount, privateKey }: MintDto) {
-    this.checkAddress();
-
     let account: Account;
     try {
       account = privateKeyToAccount(privateKey as `0x${string}`);
@@ -179,8 +190,8 @@ export class TokenService {
     try {
       const hash = await walletClient.writeContract({
         account,
-        abi,
-        address: CONTRACT_ADDRESS!,
+        abi: this.abi,
+        address: this.contractAddress,
         functionName: TOKEN_FUNCTIONS.MINT,
         args: [to, parsedAmount],
       });
@@ -195,8 +206,6 @@ export class TokenService {
   }
 
   async approve({ spender, amount, privateKey }: ApproveDto) {
-    this.checkAddress();
-
     let account: Account;
     try {
       account = privateKeyToAccount(privateKey as `0x${string}`);
@@ -218,8 +227,8 @@ export class TokenService {
 
       const hash = await walletClient.writeContract({
         account,
-        abi,
-        address: CONTRACT_ADDRESS!,
+        abi: this.abi,
+        address: this.contractAddress,
         functionName: TOKEN_FUNCTIONS.APPROVE,
         args: [spender, parsedAmount],
       });
@@ -234,12 +243,10 @@ export class TokenService {
   }
 
   async getAllowance(owner: `0x${string}`, spender: `0x${string}`) {
-    this.checkAddress();
-
     try {
       const allowance = await this.publicClient.readContract({
-        abi,
-        address: CONTRACT_ADDRESS!,
+        abi: this.abi,
+        address: this.contractAddress,
         functionName: TOKEN_FUNCTIONS.ALLOWANCE,
         args: [owner, spender],
       });
@@ -259,9 +266,7 @@ export class TokenService {
     amount,
     privateKey,
   }: TransferFromDto) {
-    this.checkAddress();
-
-    let spender;
+    let spender: Account;
     try {
       spender = privateKeyToAccount(privateKey as `0x${string}`);
     } catch {
@@ -275,14 +280,14 @@ export class TokenService {
 
     const [allowance, ownerBalance] = await Promise.all([
       this.publicClient.readContract({
-        abi,
-        address: CONTRACT_ADDRESS!,
+        abi: this.abi,
+        address: this.contractAddress,
         functionName: TOKEN_FUNCTIONS.ALLOWANCE,
         args: [from, spender.address],
       }),
       this.publicClient.readContract({
-        abi,
-        address: CONTRACT_ADDRESS!,
+        abi: this.abi,
+        address: this.contractAddress,
         functionName: TOKEN_FUNCTIONS.BALANCE_OF,
         args: [from],
       }),
@@ -305,8 +310,8 @@ export class TokenService {
     try {
       const hash = await walletClient.writeContract({
         account: spender,
-        abi,
-        address: CONTRACT_ADDRESS!,
+        abi: this.abi,
+        address: this.contractAddress,
         functionName: TOKEN_FUNCTIONS.TRANSFER_FROM,
         args: [from, to, parsedAmount],
       });

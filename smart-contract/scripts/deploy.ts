@@ -4,28 +4,37 @@ import path from "path";
 
 async function main() {
   const [deployer] = await ethers.getSigners();
-  console.log("Deploying with address:", deployer.address);
+  console.log("🔑 Deploying with address:", deployer.address);
 
-  const initialSupply = "1000";
+  const initialSupply = ethers.parseUnits("1000", 18);
   const Token = await ethers.getContractFactory("JToken");
-  const token = await Token.deploy(ethers.parseUnits(initialSupply, 18));
+  const token = await Token.deploy(initialSupply);
 
   await token.waitForDeployment();
   const address = await token.getAddress();
 
   console.log("✅ Token deployed to:", address);
 
-  const output = {
-    address,
-  };
-  const filePath = path.join(__dirname, "../deployed/contract-address.json");
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  fs.writeFileSync(filePath, JSON.stringify(output, null, 2));
+  const artifactPath = path.join(
+    __dirname,
+    "../artifacts/contracts/JToken.sol/JToken.json"
+  );
+  const artifact = JSON.parse(fs.readFileSync(artifactPath, "utf-8"));
+  const abi = artifact.abi;
 
-  console.log("📦 Contract address saved to:", filePath);
+  const outputDir = "/shared";
+  fs.mkdirSync(outputDir, { recursive: true });
+
+  fs.writeFileSync(
+    `${outputDir}/contract-address.json`,
+    JSON.stringify({ address }, null, 2)
+  );
+  fs.writeFileSync(`${outputDir}/abi.json`, JSON.stringify(abi, null, 2));
+
+  console.log("📦 ABI and address saved to /shared");
 }
 
 main().catch((error) => {
-  console.error(error);
+  console.error("❌ Deployment error:", error);
   process.exitCode = 1;
 });

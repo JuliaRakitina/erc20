@@ -1,0 +1,43 @@
+services:
+  smart-contract:
+    build:
+      context: ./smart-contract
+    container_name: smart-contract
+    volumes:
+      - shared-data:/shared
+    ports:
+      - "8545:8545"
+    command: >
+      sh -c "
+        echo '🚀 Starting Hardhat node...' &&
+        npx hardhat node &
+        echo '🕐 Waiting for node to be ready...' &&
+        sleep 5 &&
+        echo '⚙️ Deploying contract...' &&
+        npx hardhat run scripts/deploy.ts --network localhost &&
+        echo '✅ Contract deployed. Entering idle state...' &&
+        tail -f /dev/null
+      "
+
+  backend:
+    build:
+      context: ./backend
+    container_name: backend
+    depends_on:
+      - smart-contract
+    volumes:
+      - shared-data:/shared:ro
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+    command: >
+      sh -c "
+        echo '⏳ Waiting for /shared/contract-address.json...' &&
+        while [ ! -f /shared/contract-address.json ]; do sleep 1; done;
+        echo '🚀 Starting NestJS backend...' &&
+        node dist/main.js
+      "
+
+volumes:
+  shared-data:
