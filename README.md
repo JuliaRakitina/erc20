@@ -161,4 +161,4 @@ This repository is fully self-contained and showcases:
 
 ---
 
-With ❤️ by Julia Rakitina
+Julia Rakitina julia.rakitina@gmail.com
