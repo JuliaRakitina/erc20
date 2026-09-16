@@ -4,7 +4,7 @@
 
 - Branch: `hardening/portfolio-ready`.
 - Default branch and base: `main`, `2dcd0bde49de3da136f5c10754c2bbcb5c3a5f1f`.
-- The initial working tree was clean. Existing history is preserved; there is no force-push or default-branch implementation.
+- The initial working tree was clean. The original ten commits through the base remain byte-for-byte unchanged. At the owner's request, only the seven hardening commits were rewritten to correct author and committer identity; their trees, messages, dates, and order were preserved. The branch is published with an explicit `--force-with-lease`; the default branch is unchanged.
 - Local verification host: Node 24.13.0, npm 11.6.2, Docker 29.5.3, Compose 5.1.4. Containers use Node 24.21.0 with its bundled npm 11.19.0.
 
 ### Commands before changes
@@ -29,15 +29,17 @@ The initial history scan covered 10 reachable commits and 90 unique blobs. One k
 
 ## Reviewable commits
 
-| Commit               | Change                                                                                                                             |
-| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `e80cb93`            | One npm workspace lockfile, pinned compatible dependencies, targeted security overrides, strict lint/type/format tooling.          |
-| `02bb705`            | Explicit-owner JToken, starter removal, 16 contract tests, local compiler, validated repeatable deployment.                        |
-| `ead97b3`            | Validated configuration, signer port, typed Viem adapter, precise DTOs, receipts/errors, health/Swagger, meaningful backend tests. |
-| `97decde`            | Disposable-chain HTTP tests with separate owner/spender APIs and process cleanup.                                                  |
-| `149d4a0`            | Non-root health-gated Compose, startup supervision, smoke check, pinned CI actions.                                                |
-| `dbdc145`            | Reject request bodies on read endpoints; regression coverage.                                                                      |
-| Documentation commit | Verified walkthrough, placeholders, architecture, security/amount decisions, dependency exceptions, and this report.               |
+| Commit    | Change                                                                                                                             |
+| --------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `8f98108` | One npm workspace lockfile, pinned compatible dependencies, targeted security overrides, strict lint/type/format tooling.          |
+| `9bfc663` | Explicit-owner JToken, starter removal, 16 contract tests, local compiler, validated repeatable deployment.                        |
+| `b545e6f` | Validated configuration, signer port, typed Viem adapter, precise DTOs, receipts/errors, health/Swagger, meaningful backend tests. |
+| `8124797` | Disposable-chain HTTP tests with separate owner/spender APIs and process cleanup.                                                  |
+| `31aa3ca` | Non-root health-gated Compose, startup supervision, smoke check, pinned CI actions.                                                |
+| `fc6912e` | Reject request bodies on read endpoints; regression coverage.                                                                      |
+| `3df6419` | Verified walkthrough, placeholders, architecture, security/amount decisions, dependency exceptions, and this report.               |
+
+The seven commits above use **Julia Rakitina <julia.rakitina@gmail.com>** as both author and committer, associated with GitHub account **JuliaRakitina**. This separate personal documentation commit updates the references after that identity-only rewrite. Raw commit comparison verified that the seven original author/committer timestamps and time zones were retained and that the original ten commit objects were unchanged.
 
 ## Final verification
 
@@ -89,7 +91,7 @@ Total: **127 meaningful cases**. The Node integration fixture wrapper is exclude
 
 ## Intentionally unchanged
 
-Complete commit history and repository name remain intact. Existing SPDX/package license metadata is retained; no repository license was added. Owner-only minting and JToken/JTK naming remain the intended demonstration. There is no frontend, database, authentication subsystem, broker, proxy, public-network deployment, real-key custody, or repository-metadata change.
+The original ten commits and repository name remain intact; the seven later hardening commits received only the authorized identity correction before this documentation follow-up. Existing SPDX/package license metadata is retained; no repository license was added. Owner-only minting and JToken/JTK naming remain the intended demonstration. There is no frontend, database, authentication subsystem, broker, proxy, public-network deployment, real-key custody, or repository-metadata change.
 
 ## Optional repository presentation
 
