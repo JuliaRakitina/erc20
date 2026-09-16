@@ -1,10 +1,10 @@
-# Hardening verification and handoff
+# Hardening verification record
 
-## Branch and baseline
+## Integration and baseline
 
-- Branch: `hardening/portfolio-ready`.
-- Default branch and base: `main`, `2dcd0bde49de3da136f5c10754c2bbcb5c3a5f1f`.
-- The initial working tree was clean. The original ten commits through the base remain byte-for-byte unchanged. At the owner's request, only the seven hardening commits were rewritten to correct author and committer identity; their trees, messages, dates, and order were preserved. The branch is published with an explicit `--force-with-lease`; the default branch is unchanged.
+- The 2026 hardening was merged into `main` through [PR #1](https://github.com/JuliaRakitina/erc20/pull/1) on September 16, 2026.
+- Original `main` baseline: `2dcd0bde49de3da136f5c10754c2bbcb5c3a5f1f`.
+- The original ten commits through the baseline remain byte-for-byte unchanged. Before merge, the seven hardening commits received an identity-only correction to use Julia Rakitina's personal author and committer details; their trees, messages, dates, and order were preserved.
 - Local verification host: Node 24.13.0, npm 11.6.2, Docker 29.5.3, Compose 5.1.4. Containers use Node 24.21.0 with its bundled npm 11.19.0.
 
 ### Commands before changes
@@ -69,7 +69,7 @@ The seven commits above use **Julia Rakitina <julia.rakitina@gmail.com>** as bot
 | Launcher signal checks                                                                                      | Requested SIGTERM/SIGINT exit 0; unexpected child SIGKILL exits 1; exact child processes cleaned up.                                         |
 | `git diff --check`                                                                                          | Passed.                                                                                                                                      |
 
-The GitHub workflow repeats a clean checkout/install, full verification, audit, and Compose smoke on Ubuntu with the pinned Node version. Its actual run URL/status is recorded in the draft PR and final handoff; configured checks alone are not evidence of a successful remote run.
+The GitHub workflow repeats a clean checkout/install, full verification, audit, and Compose smoke on Ubuntu with the pinned Node version. The `main` run for merge commit `c87eff7` completed successfully: [Verify #35140106939](https://github.com/JuliaRakitina/erc20/actions/runs/35140106939).
 
 ### Meaningful test inventory
 
@@ -91,8 +91,5 @@ Total: **127 meaningful cases**. The Node integration fixture wrapper is exclude
 
 ## Intentionally unchanged
 
-The original ten commits and repository name remain intact; the seven later hardening commits received only the authorized identity correction before this documentation follow-up. Existing SPDX/package license metadata is retained; no repository license was added. Owner-only minting and JToken/JTK naming remain the intended demonstration. There is no frontend, database, authentication subsystem, broker, proxy, public-network deployment, real-key custody, or repository-metadata change.
+The original ten commits and repository name remain intact; the seven later hardening commits received only the authorized identity correction before this documentation follow-up. Existing SPDX/package license metadata is retained; no repository license was added. Owner-only minting and JToken/JTK naming remain the intended demonstration. There is no frontend, database, authentication subsystem, broker, proxy, public-network deployment, or real-key custody.
 
-## Optional repository presentation
-
-Not implemented: rename to `erc20-viem-service`; description “Production-minded ERC-20 interaction service built with Solidity, NestJS, Viem, and Docker”; topics `solidity`, `erc20`, `nestjs`, `viem`, `typescript`, `hardhat`, `docker`, `web3`.

@@ -1,5 +1,7 @@
 # ERC-20 interaction service
 
+[![Verify](https://github.com/JuliaRakitina/erc20/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/JuliaRakitina/erc20/actions/workflows/ci.yml)
+
 A small Solidity/NestJS service that demonstrates precise token operations, an explicit signing boundary, and reproducible local integration tests.
 
 **Scope:** a local custodial demo with fake funds. Not audited, production-ready, or suitable for real custody. Never import real keys or fund these accounts.
