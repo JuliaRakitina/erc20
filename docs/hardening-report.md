@@ -92,4 +92,3 @@ Total: **127 meaningful cases**. The Node integration fixture wrapper is exclude
 ## Intentionally unchanged
 
 The original ten commits and repository name remain intact; the seven later hardening commits received only the authorized identity correction before this documentation follow-up. Existing SPDX/package license metadata is retained; no repository license was added. Owner-only minting and JToken/JTK naming remain the intended demonstration. There is no frontend, database, authentication subsystem, broker, proxy, public-network deployment, or real-key custody.
-
