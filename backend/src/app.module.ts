@@ -1,11 +1,21 @@
 import { Module } from '@nestjs/common';
-import { AppController } from './app.controller';
-import { AppService } from './app.service';
-import { TokenModule } from './token/token.module';
+import { APP_CONFIG, loadConfig } from './config/app.config';
+import { HealthController } from './health.controller';
+import { ChainClients } from './token/chain-clients';
+import { HardhatLocalSigner } from './token/hardhat-local.signer';
+import { TokenController } from './token/token.controller';
+import { SignerPort, TokenChainPort } from './token/token.port';
+import { TokenService } from './token/token.service';
+import { ViemTokenAdapter } from './token/viem-token.adapter';
 
 @Module({
-  imports: [TokenModule],
-  controllers: [AppController],
-  providers: [AppService],
+  controllers: [TokenController, HealthController],
+  providers: [
+    { provide: APP_CONFIG, useFactory: () => loadConfig() },
+    ChainClients,
+    { provide: SignerPort, useClass: HardhatLocalSigner },
+    { provide: TokenChainPort, useClass: ViemTokenAdapter },
+    TokenService,
+  ],
 })
 export class AppModule {}

@@ -1,0 +1,61 @@
+{
+  "name": "erc20-viem-service",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Local ERC-20 integration demo with an explicit signing boundary",
+  "workspaces": [
+    "backend",
+    "smart-contract"
+  ],
+  "engines": {
+    "node": ">=24.13.0 <25",
+    "npm": ">=11 <12"
+  },
+  "packageManager": "npm@11.6.2",
+  "scripts": {
+    "build": "npm run compile -w smart-contract && npm run build -w backend",
+    "typecheck": "npm run typecheck --workspaces",
+    "lint": "eslint . && solhint \"smart-contract/contracts/**/*.sol\"",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "npm run test:contracts && npm run test:backend",
+    "test:contracts": "npm test -w smart-contract",
+    "test:backend": "npm test -w backend -- --runInBand",
+    "test:integration": "node --test scripts/test-integration.mjs",
+    "verify": "npm run format:check && npm run lint && npm run typecheck && npm run build && npm test && npm run test:integration",
+    "audit:security": "npm audit --audit-level=high",
+    "dev:chain": "node scripts/local-chain.mjs",
+    "dev:deploy": "npm run deploy -w smart-contract",
+    "dev:api": "node --env-file=.env backend/dist/main.js",
+    "demo:smoke": "node scripts/smoke.mjs",
+    "demo:down": "docker compose down --volumes --remove-orphans"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/node": "24.13.5",
+    "eslint": "10.10.0",
+    "globals": "17.12.0",
+    "prettier": "3.9.7",
+    "prettier-plugin-solidity": "2.4.1",
+    "solhint": "6.2.4",
+    "ts-node": "10.9.2",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.70.0"
+  },
+  "overrides": {
+    "@nestjs/platform-express": {
+      "multer": "2.4.0"
+    },
+    "hardhat": {
+      "adm-zip": "0.6.1",
+      "undici": "6.28.1"
+    },
+    "solc": {
+      "tmp": "0.2.7"
+    },
+    "mocha": {
+      "serialize-javascript": "7.1.1",
+      "diff": "8.0.3"
+    }
+  }
+}

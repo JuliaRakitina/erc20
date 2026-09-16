@@ -1,82 +1,190 @@
-import { expect } from "chai";
-import { ethers } from "hardhat";
+import { loadFixture } from '@nomicfoundation/hardhat-network-helpers';
+import { expect } from 'chai';
+import { ethers } from 'hardhat';
 
-describe("JToken", function () {
-  let JToken: any;
-  let token: any;
-  let owner: any;
-  let addr1: any;
-  let addr2: any;
+describe('JToken', function () {
+  const initialSupply = ethers.parseUnits('1000', 18);
+  const amount = (value: string) => ethers.parseUnits(value, 18);
 
-  const initialSupply = ethers.parseUnits("1000", 18);
-
-  beforeEach(async function () {
-    [owner, addr1, addr2] = await ethers.getSigners();
-    JToken = await ethers.getContractFactory("JToken");
-    token = await JToken.deploy(initialSupply);
+  async function deployToken() {
+    const [owner, spender, recipient] = await ethers.getSigners();
+    const factory = await ethers.getContractFactory('JToken');
+    const token = await factory.deploy(owner.address, initialSupply);
     await token.waitForDeployment();
+    return { token, factory, owner, spender, recipient };
+  }
+
+  it('reports its name, symbol, and decimals', async function () {
+    const { token } = await loadFixture(deployToken);
+    expect(await token.name()).to.equal('JToken');
+    expect(await token.symbol()).to.equal('JTK');
+    expect(await token.decimals()).to.equal(18n);
   });
 
-  it("Should deploy with correct name and symbol", async function () {
-    expect(await token.name()).to.equal("JToken");
-    expect(await token.symbol()).to.equal("JTK");
+  it('assigns ownership and initial supply to the explicit owner', async function () {
+    const { factory, owner, recipient } = await loadFixture(deployToken);
+    const token = await factory.deploy(recipient.address, initialSupply);
+    expect(await token.owner()).to.equal(recipient.address);
+    expect(await token.totalSupply()).to.equal(initialSupply);
+    expect(await token.balanceOf(recipient.address)).to.equal(initialSupply);
+    expect(await token.balanceOf(owner.address)).to.equal(0n);
   });
 
-  it("Should assign initial supply to owner", async function () {
-    const balance = await token.balanceOf(owner.address);
-    expect(balance).to.equal(initialSupply);
+  it('emits a mint Transfer event for the initial supply', async function () {
+    const { factory, owner } = await loadFixture(deployToken);
+    const token = await factory.deploy(owner.address, initialSupply);
+    await expect(token.deploymentTransaction())
+      .to.emit(token, 'Transfer')
+      .withArgs(ethers.ZeroAddress, owner.address, initialSupply);
   });
 
-  it("Should allow transfer between accounts", async function () {
-    await token.transfer(addr1.address, ethers.parseUnits("100", 18));
-    const balance = await token.balanceOf(addr1.address);
-    expect(balance).to.equal(ethers.parseUnits("100", 18));
+  it('allows an initial supply of zero', async function () {
+    const { factory, owner } = await loadFixture(deployToken);
+    const token = await factory.deploy(owner.address, 0n);
+    expect(await token.totalSupply()).to.equal(0n);
+    expect(await token.balanceOf(owner.address)).to.equal(0n);
   });
 
-  it("Should fail if sender doesn’t have enough tokens", async function () {
+  it('rejects a zero initial owner', async function () {
+    const { factory, token } = await loadFixture(deployToken);
+    await expect(factory.deploy(ethers.ZeroAddress, initialSupply))
+      .to.be.revertedWithCustomError(token, 'OwnableInvalidOwner')
+      .withArgs(ethers.ZeroAddress);
+  });
+
+  it('lets the owner mint and emits the corresponding Transfer', async function () {
+    const { token, recipient } = await loadFixture(deployToken);
+    await expect(token.mint(recipient.address, amount('5.25')))
+      .to.emit(token, 'Transfer')
+      .withArgs(ethers.ZeroAddress, recipient.address, amount('5.25'));
+    expect(await token.balanceOf(recipient.address)).to.equal(amount('5.25'));
+    expect(await token.totalSupply()).to.equal(initialSupply + amount('5.25'));
+  });
+
+  it('rejects minting by a non-owner', async function () {
+    const { token, spender, recipient } = await loadFixture(deployToken);
     await expect(
-      token.connect(addr1).transfer(owner.address, ethers.parseUnits("1", 18))
-    ).to.be.revertedWithCustomError(token, "ERC20InsufficientBalance");
+      token.connect(spender).getFunction('mint')(
+        recipient.address,
+        amount('1'),
+      ),
+    )
+      .to.be.revertedWithCustomError(token, 'OwnableUnauthorizedAccount')
+      .withArgs(spender.address);
+    expect(await token.totalSupply()).to.equal(initialSupply);
   });
 
-  it("Should approve tokens for delegated transfer", async function () {
-    await token.approve(addr1.address, ethers.parseUnits("200", 18));
-    const allowance = await token.allowance(owner.address, addr1.address);
-    expect(allowance).to.equal(ethers.parseUnits("200", 18));
-  });
-
-  it("Should allow transferFrom using allowance", async function () {
-    await token.approve(addr1.address, ethers.parseUnits("50", 18));
-    await token
-      .connect(addr1)
-      .transferFrom(owner.address, addr2.address, ethers.parseUnits("50", 18));
-
-    expect(await token.balanceOf(addr2.address)).to.equal(
-      ethers.parseUnits("50", 18)
+  it('transfers exact units, updates both balances, and emits Transfer', async function () {
+    const { token, owner, recipient } = await loadFixture(deployToken);
+    const units = amount('1.000000000000000001');
+    await expect(token.transfer(recipient.address, units))
+      .to.emit(token, 'Transfer')
+      .withArgs(owner.address, recipient.address, units);
+    expect(await token.balanceOf(owner.address)).to.equal(
+      initialSupply - units,
     );
-    const remaining = await token.allowance(owner.address, addr1.address);
-    expect(remaining).to.equal(0);
+    expect(await token.balanceOf(recipient.address)).to.equal(units);
+    expect(await token.totalSupply()).to.equal(initialSupply);
   });
 
-  it("Should fail transferFrom without enough allowance", async function () {
-    await token.approve(addr1.address, ethers.parseUnits("10", 18));
+  it("rejects a transfer exceeding the sender's balance", async function () {
+    const { token, spender, recipient } = await loadFixture(deployToken);
     await expect(
-      token
-        .connect(addr1)
-        .transferFrom(owner.address, addr2.address, ethers.parseUnits("20", 18))
-    ).to.be.revertedWithCustomError(token, "ERC20InsufficientAllowance");
+      token.connect(spender).getFunction('transfer')(
+        recipient.address,
+        amount('1'),
+      ),
+    )
+      .to.be.revertedWithCustomError(token, 'ERC20InsufficientBalance')
+      .withArgs(spender.address, 0n, amount('1'));
   });
 
-  it("Should allow owner to mint tokens", async function () {
-    await token.mint(addr1.address, ethers.parseUnits("500", 18));
-    expect(await token.balanceOf(addr1.address)).to.equal(
-      ethers.parseUnits("500", 18)
+  it('records an approval and emits Approval', async function () {
+    const { token, owner, spender } = await loadFixture(deployToken);
+    await expect(token.approve(spender.address, amount('10')))
+      .to.emit(token, 'Approval')
+      .withArgs(owner.address, spender.address, amount('10'));
+    expect(await token.allowance(owner.address, spender.address)).to.equal(
+      amount('10'),
     );
   });
 
-  it("Should not allow non-owner to mint", async function () {
+  it('replaces an existing allowance when the owner approves again', async function () {
+    const { token, owner, spender } = await loadFixture(deployToken);
+    await token.approve(spender.address, amount('10'));
+    await token.approve(spender.address, amount('3'));
+    expect(await token.allowance(owner.address, spender.address)).to.equal(
+      amount('3'),
+    );
+  });
+
+  it('lets the approved spender transfer from the owner and reduces allowance', async function () {
+    const { token, owner, spender, recipient } = await loadFixture(deployToken);
+    await token.approve(spender.address, amount('10'));
     await expect(
-      token.connect(addr1).mint(addr2.address, ethers.parseUnits("500", 18))
-    ).to.be.revertedWithCustomError(token, "OwnableUnauthorizedAccount");
+      token.connect(spender).getFunction('transferFrom')(
+        owner.address,
+        recipient.address,
+        amount('3'),
+      ),
+    )
+      .to.emit(token, 'Transfer')
+      .withArgs(owner.address, recipient.address, amount('3'));
+    expect(await token.balanceOf(owner.address)).to.equal(amount('997'));
+    expect(await token.balanceOf(recipient.address)).to.equal(amount('3'));
+    expect(await token.balanceOf(spender.address)).to.equal(0n);
+    expect(await token.allowance(owner.address, spender.address)).to.equal(
+      amount('7'),
+    );
+  });
+
+  it('rejects transferFrom with insufficient allowance and preserves state', async function () {
+    const { token, owner, spender, recipient } = await loadFixture(deployToken);
+    await token.approve(spender.address, amount('2'));
+    await expect(
+      token.connect(spender).getFunction('transferFrom')(
+        owner.address,
+        recipient.address,
+        amount('3'),
+      ),
+    )
+      .to.be.revertedWithCustomError(token, 'ERC20InsufficientAllowance')
+      .withArgs(spender.address, amount('2'), amount('3'));
+    expect(await token.balanceOf(owner.address)).to.equal(initialSupply);
+    expect(await token.balanceOf(recipient.address)).to.equal(0n);
+    expect(await token.allowance(owner.address, spender.address)).to.equal(
+      amount('2'),
+    );
+  });
+
+  it('rejects transferFrom with insufficient owner balance and restores allowance', async function () {
+    const { token, owner, spender, recipient } = await loadFixture(deployToken);
+    await token.approve(spender.address, initialSupply + 1n);
+    await expect(
+      token.connect(spender).getFunction('transferFrom')(
+        owner.address,
+        recipient.address,
+        initialSupply + 1n,
+      ),
+    )
+      .to.be.revertedWithCustomError(token, 'ERC20InsufficientBalance')
+      .withArgs(owner.address, initialSupply, initialSupply + 1n);
+    expect(await token.allowance(owner.address, spender.address)).to.equal(
+      initialSupply + 1n,
+    );
+  });
+
+  it('rejects minting to the zero address', async function () {
+    const { token } = await loadFixture(deployToken);
+    await expect(token.mint(ethers.ZeroAddress, 1n))
+      .to.be.revertedWithCustomError(token, 'ERC20InvalidReceiver')
+      .withArgs(ethers.ZeroAddress);
+  });
+
+  it('rejects transferring to the zero address', async function () {
+    const { token } = await loadFixture(deployToken);
+    await expect(token.transfer(ethers.ZeroAddress, 1n))
+      .to.be.revertedWithCustomError(token, 'ERC20InvalidReceiver')
+      .withArgs(ethers.ZeroAddress);
   });
 });

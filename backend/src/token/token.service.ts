@@ -1,326 +1,92 @@
+import { Injectable } from '@nestjs/common';
+import { getAddress, isAddress, type Address } from 'viem';
+import { validationError } from '../common/api-error';
 import {
-  BadRequestException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
-import {
-  Account,
-  Abi,
-  createPublicClient,
-  createWalletClient,
-  http,
-  parseUnits,
-} from 'viem';
-import { privateKeyToAccount } from 'viem/accounts';
-import { hardhat } from 'viem/chains';
-import { from, combineLatest } from 'rxjs';
-import { map } from 'rxjs/operators';
-import * as fs from 'fs';
-import * as path from 'path';
+  ApproveDto,
+  isPositiveBaseUnits,
+  MintDto,
+  TransferDto,
+  TransferFromDto,
+} from './dto/token.dto';
+import { TokenChainPort, type TokenWrite } from './token.port';
 
-import {
-  ABI_FILE,
-  CONTRACT_ADDRESS_FILE,
-  ERROR_MESSAGES,
-  PUBLIC_CLIENT_URL,
-  SHARED_PATH,
-  TOKEN_FUNCTIONS,
-} from '../utils/constants';
+function address(value: string): Address {
+  if (!isAddress(value, { strict: false })) throw validationError();
+  return getAddress(value);
+}
 
-import { MintDto } from './dto/mint.dto';
-import { ApproveDto } from './dto/approve.dto';
-import { TransferFromDto } from './dto/transfer-from.dto';
+function amount(value: string): bigint {
+  if (!isPositiveBaseUnits(value)) throw validationError();
+  return BigInt(value);
+}
 
 @Injectable()
 export class TokenService {
-  private readonly sharedPath = SHARED_PATH;
+  constructor(private readonly chain: TokenChainPort) {}
 
-  private readonly abi: Abi = this.loadAbi();
-  private readonly contractAddress = this.loadAddress();
-
-  private readonly publicClient = createPublicClient({
-    chain: hardhat,
-    transport: http(PUBLIC_CLIENT_URL),
-  });
-
-  private loadAbi() {
-    const filePath = path.join(this.sharedPath, ABI_FILE);
-    if (!fs.existsSync(filePath)) {
-      throw new NotFoundException(ERROR_MESSAGES.ABI_NOT_FOUND);
-    }
-    return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+  metadata() {
+    return this.chain.metadata();
   }
 
-  private loadAddress(): `0x${string}` {
-    const filePath = path.join(this.sharedPath, CONTRACT_ADDRESS_FILE);
-    if (!fs.existsSync(filePath)) {
-      throw new NotFoundException(ERROR_MESSAGES.CONTRACT_ADDRESS_MISSING);
-    }
-    const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-    return data.address;
+  async balance(value: string) {
+    const owner = address(value);
+    const balance = await this.chain.balance(owner);
+    return { address: owner, balanceBaseUnits: balance.toString() };
   }
 
-  getTokenInfo() {
-    const name$ = from(
-      this.publicClient.readContract({
-        abi: this.abi,
-        address: this.contractAddress,
-        functionName: TOKEN_FUNCTIONS.NAME,
-      }),
-    );
+  async allowance(ownerValue: string, spenderValue: string) {
+    const owner = address(ownerValue);
+    const spender = address(spenderValue);
+    const allowance = await this.chain.allowance(owner, spender);
+    return { owner, spender, allowanceBaseUnits: allowance.toString() };
+  }
 
-    const symbol$ = from(
-      this.publicClient.readContract({
-        abi: this.abi,
-        address: this.contractAddress,
-        functionName: TOKEN_FUNCTIONS.SYMBOL,
-      }),
-    );
-
-    const supply$ = from(
-      this.publicClient.readContract({
-        abi: this.abi,
-        address: this.contractAddress,
-        functionName: TOKEN_FUNCTIONS.TOTAL_SUPPLY,
-      }) as Promise<bigint>,
-    );
-
-    return combineLatest([name$, symbol$, supply$]).pipe(
-      map(([name, symbol, totalSupply]) => ({
-        name,
-        symbol,
-        totalSupply: totalSupply.toString(),
-      })),
+  async transfer(dto: TransferDto) {
+    const to = address(dto.to);
+    return this.write(
+      { functionName: 'transfer', args: [to, amount(dto.amountBaseUnits)] },
+      dto.amountBaseUnits,
+      { to },
     );
   }
 
-  async getBalanceOf(address: `0x${string}`) {
-    try {
-      const balance = await this.publicClient.readContract({
-        abi: this.abi,
-        address: this.contractAddress,
-        functionName: TOKEN_FUNCTIONS.BALANCE_OF,
-        args: [address],
-      });
-
-      return {
-        balance: (balance as bigint).toString(),
-      };
-    } catch (error: any) {
-      throw new BadRequestException(ERROR_MESSAGES.INVALID_ADDRESS(address));
-    }
+  async mint(dto: MintDto) {
+    const to = address(dto.to);
+    return this.write(
+      { functionName: 'mint', args: [to, amount(dto.amountBaseUnits)] },
+      dto.amountBaseUnits,
+      { to },
+    );
   }
 
-  async transferFrom({
-    to,
-    amount,
-    privateKey,
-  }: {
-    to: `0x${string}`;
-    amount: string;
-    privateKey: `0x${string}`;
-  }) {
-    try {
-      const account = privateKeyToAccount(privateKey);
-      const from = account.address;
-
-      if (to.toLowerCase() === from.toLowerCase()) {
-        throw new BadRequestException(ERROR_MESSAGES.SAME_ADDRESS_TRANSFER);
-      }
-
-      const parsedAmount = BigInt(parseUnits(amount, 18));
-      if (parsedAmount <= 0n) {
-        throw new BadRequestException(ERROR_MESSAGES.AMOUNT_ZERO_OR_NEGATIVE);
-      }
-
-      const balanceRaw = await this.publicClient.readContract({
-        abi: this.abi,
-        address: this.contractAddress,
-        functionName: TOKEN_FUNCTIONS.BALANCE_OF,
-        args: [from],
-      });
-
-      const senderBalance = balanceRaw as bigint;
-
-      if (senderBalance < parsedAmount) {
-        throw new BadRequestException(ERROR_MESSAGES.INSUFFICIENT_BALANCE);
-      }
-
-      const walletClient = createWalletClient({
-        account,
-        chain: hardhat,
-        transport: http(),
-      });
-
-      const hash = await walletClient.writeContract({
-        abi: this.abi,
-        address: this.contractAddress,
-        functionName: TOKEN_FUNCTIONS.TRANSFER,
-        args: [to, parsedAmount],
-      });
-
-      return { hash };
-    } catch (error: any) {
-      console.error(error);
-      throw new BadRequestException(
-        `${ERROR_MESSAGES.TRANSFER_FAILED}: ${error?.shortMessage || error?.message}`,
-      );
-    }
+  async approve(dto: ApproveDto) {
+    const spender = address(dto.spender);
+    return this.write(
+      { functionName: 'approve', args: [spender, amount(dto.amountBaseUnits)] },
+      dto.amountBaseUnits,
+      { spender },
+    );
   }
 
-  async mint({ to, amount, privateKey }: MintDto) {
-    let account: Account;
-    try {
-      account = privateKeyToAccount(privateKey as `0x${string}`);
-    } catch (e: any) {
-      throw new BadRequestException(ERROR_MESSAGES.INVALID_PRIVATE_KEY);
-    }
-
-    const walletClient = createWalletClient({
-      account,
-      chain: hardhat,
-      transport: http(),
-    });
-
-    const parsedAmount = BigInt(parseUnits(amount, 18));
-    if (parsedAmount <= 0n) {
-      throw new BadRequestException(ERROR_MESSAGES.AMOUNT_ZERO_OR_NEGATIVE);
-    }
-
-    try {
-      const hash = await walletClient.writeContract({
-        account,
-        abi: this.abi,
-        address: this.contractAddress,
-        functionName: TOKEN_FUNCTIONS.MINT,
-        args: [to, parsedAmount],
-      });
-
-      return { hash };
-    } catch (error: any) {
-      console.error(error);
-      throw new BadRequestException(
-        `${ERROR_MESSAGES.MINT_FAILED}: ${error?.shortMessage || error?.message}`,
-      );
-    }
+  async transferFrom(dto: TransferFromDto) {
+    const from = address(dto.from);
+    const to = address(dto.to);
+    return this.write(
+      {
+        functionName: 'transferFrom',
+        args: [from, to, amount(dto.amountBaseUnits)],
+      },
+      dto.amountBaseUnits,
+      { from, to },
+    );
   }
 
-  async approve({ spender, amount, privateKey }: ApproveDto) {
-    let account: Account;
-    try {
-      account = privateKeyToAccount(privateKey as `0x${string}`);
-    } catch {
-      throw new BadRequestException(ERROR_MESSAGES.INVALID_PRIVATE_KEY);
-    }
-
-    const parsedAmount = BigInt(parseUnits(amount, 18));
-    if (parsedAmount <= 0n) {
-      throw new BadRequestException(ERROR_MESSAGES.AMOUNT_ZERO_OR_NEGATIVE);
-    }
-
-    try {
-      const walletClient = createWalletClient({
-        account,
-        chain: hardhat,
-        transport: http(),
-      });
-
-      const hash = await walletClient.writeContract({
-        account,
-        abi: this.abi,
-        address: this.contractAddress,
-        functionName: TOKEN_FUNCTIONS.APPROVE,
-        args: [spender, parsedAmount],
-      });
-
-      return { hash };
-    } catch (error: any) {
-      console.error(error);
-      throw new BadRequestException(
-        `${ERROR_MESSAGES.TRANSFER_FAILED}: ${error?.shortMessage || error?.message}`,
-      );
-    }
-  }
-
-  async getAllowance(owner: `0x${string}`, spender: `0x${string}`) {
-    try {
-      const allowance = await this.publicClient.readContract({
-        abi: this.abi,
-        address: this.contractAddress,
-        functionName: TOKEN_FUNCTIONS.ALLOWANCE,
-        args: [owner, spender],
-      });
-
-      return { allowance: (allowance as bigint).toString() };
-    } catch (error: any) {
-      console.error(error);
-      throw new BadRequestException(
-        ERROR_MESSAGES.INVALID_ADDRESS(`${owner}, ${spender}`),
-      );
-    }
-  }
-
-  async transferFromBySpender({
-    from,
-    to,
-    amount,
-    privateKey,
-  }: TransferFromDto) {
-    let spender: Account;
-    try {
-      spender = privateKeyToAccount(privateKey as `0x${string}`);
-    } catch {
-      throw new BadRequestException(ERROR_MESSAGES.INVALID_PRIVATE_KEY);
-    }
-
-    const parsedAmount = BigInt(parseUnits(amount, 18));
-    if (parsedAmount <= 0n) {
-      throw new BadRequestException(ERROR_MESSAGES.AMOUNT_ZERO_OR_NEGATIVE);
-    }
-
-    const [allowance, ownerBalance] = await Promise.all([
-      this.publicClient.readContract({
-        abi: this.abi,
-        address: this.contractAddress,
-        functionName: TOKEN_FUNCTIONS.ALLOWANCE,
-        args: [from, spender.address],
-      }),
-      this.publicClient.readContract({
-        abi: this.abi,
-        address: this.contractAddress,
-        functionName: TOKEN_FUNCTIONS.BALANCE_OF,
-        args: [from],
-      }),
-    ]);
-
-    if ((allowance as bigint) < parsedAmount) {
-      throw new BadRequestException(ERROR_MESSAGES.ALLOWANCE_TOO_LOW);
-    }
-
-    if ((ownerBalance as bigint) < parsedAmount) {
-      throw new BadRequestException(ERROR_MESSAGES.NOT_ENOUGH_TOKENS);
-    }
-
-    const walletClient = createWalletClient({
-      account: spender,
-      chain: hardhat,
-      transport: http(),
-    });
-
-    try {
-      const hash = await walletClient.writeContract({
-        account: spender,
-        abi: this.abi,
-        address: this.contractAddress,
-        functionName: TOKEN_FUNCTIONS.TRANSFER_FROM,
-        args: [from, to, parsedAmount],
-      });
-
-      return { hash };
-    } catch (error: any) {
-      throw new BadRequestException(
-        `${ERROR_MESSAGES.TRANSFER_FAILED}: ${error?.shortMessage || error?.message}`,
-      );
-    }
+  private async write(
+    command: TokenWrite,
+    amountBaseUnits: string,
+    addresses: { from?: Address; to?: Address; spender?: Address },
+  ) {
+    const confirmation = await this.chain.execute(command);
+    return { ...confirmation, amountBaseUnits, ...addresses };
   }
 }

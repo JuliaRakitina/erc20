@@ -1,43 +1,69 @@
 services:
-  smart-contract:
+  chain:
     build:
-      context: ./smart-contract
-    container_name: smart-contract
-    volumes:
-      - shared-data:/shared
-    ports:
-      - "8545:8545"
-    command: >
-      sh -c "
-        echo '🚀 Starting Hardhat node...' &&
-        npx hardhat node &
-        echo '🕐 Waiting for node to be ready...' &&
-        sleep 5 &&
-        echo '⚙️ Deploying contract...' &&
-        npx hardhat run scripts/deploy.ts --network localhost &&
-        echo '✅ Contract deployed. Entering idle state...' &&
-        tail -f /dev/null
-      "
-
-  backend:
-    build:
-      context: ./backend
-    container_name: backend
-    depends_on:
-      - smart-contract
-    volumes:
-      - shared-data:/shared:ro
-    ports:
-      - "3000:3000"
+      context: .
+      target: chain
+    init: true
     environment:
-      - NODE_ENV=production
-    command: >
-      sh -c "
-        echo '⏳ Waiting for /shared/contract-address.json...' &&
-        while [ ! -f /shared/contract-address.json ]; do sleep 1; done;
-        echo '🚀 Starting NestJS backend...' &&
-        node dist/main.js
-      "
+      CHAIN_HOST: 0.0.0.0
+    ports:
+      - '127.0.0.1:${RPC_PORT:-8545}:8545'
+    healthcheck:
+      test: ['CMD', 'node', 'scripts/healthcheck.mjs', 'chain']
+      interval: 2s
+      timeout: 4s
+      retries: 30
+      start_period: 5s
+    stop_grace_period: 10s
+
+  deploy:
+    build:
+      context: .
+      target: chain
+    init: true
+    command:
+      ['npm', 'run', 'deploy', '-w', 'smart-contract', '--', '--no-compile']
+    environment:
+      RPC_URL: http://chain:8545
+      DEPLOYMENT_FILE: /app/shared/deployment.json
+    volumes:
+      - deployment:/app/shared
+    depends_on:
+      chain:
+        condition: service_healthy
+    restart: 'no'
+
+  api:
+    build:
+      context: .
+      target: api
+    init: true
+    environment:
+      NODE_ENV: development
+      LOCAL_DEMO: 'true'
+      SIGNER_MODE: hardhat-local
+      SIGNER_ACCOUNT_INDEX: '0'
+      CHAIN_ID: '31337'
+      RPC_URL: http://chain:8545
+      DEPLOYMENT_FILE: /app/shared/deployment.json
+      HOST: 0.0.0.0
+      PORT: '3000'
+    volumes:
+      - deployment:/app/shared:ro
+    ports:
+      - '127.0.0.1:${API_PORT:-3000}:3000'
+    depends_on:
+      chain:
+        condition: service_healthy
+      deploy:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ['CMD', 'node', 'scripts/healthcheck.mjs', 'api']
+      interval: 3s
+      timeout: 4s
+      retries: 20
+      start_period: 5s
+    stop_grace_period: 10s
 
 volumes:
-  shared-data:
+  deployment:

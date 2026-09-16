@@ -1,28 +1,21 @@
 import { NestFactory } from '@nestjs/core';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
-import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
-import {ValidationPipe} from "@nestjs/common";
+import { APP_CONFIG, type AppConfig } from './config/app.config';
+import { configureApp } from './configure-app';
 
-async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
-
-  app.useGlobalPipes(
-      new ValidationPipe({
-        whitelist: true,
-        forbidNonWhitelisted: true,
-        transform: true,
-      }),
-  );
-
-  const config = new DocumentBuilder()
-    .setTitle('JToken API')
-    .setDescription('API for ERC20 JToken interaction using Viem')
-    .setVersion('1.0')
-    .build();
-
-  const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api', app, document);
-
-  await app.listen(process.env.PORT ?? 3000);
+async function bootstrap(): Promise<void> {
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    bodyParser: false,
+  });
+  configureApp(app);
+  const config = app.get<AppConfig>(APP_CONFIG);
+  await app.listen(config.port, config.host);
 }
-bootstrap();
+
+void bootstrap().catch(() => {
+  process.stderr.write(
+    'API startup failed. Check local demo configuration and port availability.\n',
+  );
+  process.exitCode = 1;
+});
