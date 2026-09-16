@@ -20,3 +20,16 @@
 .env.test.local
 .env.production.local
 .env.local
+
+# Workspace dependencies, build output, and ephemeral local deployments
+node_modules/
+dist/
+coverage/
+artifacts/
+cache/
+typechain-types/
+shared/
+*.tsbuildinfo
+.DS_Store
+.env.*
+!.env.example
