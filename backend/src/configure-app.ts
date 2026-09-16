@@ -3,12 +3,14 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { ApiErrorFilter } from './common/api-error.filter';
 import { validationError } from './common/api-error';
+import { ReadBodyGuard } from './common/read-body.guard';
 
 export function configureApp(
   app: NestExpressApplication,
   withDocs = true,
 ): void {
   app.useBodyParser('json', { limit: '16kb' });
+  app.useGlobalGuards(new ReadBodyGuard());
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,

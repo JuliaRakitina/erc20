@@ -130,6 +130,62 @@ describe('HTTP API boundary', () => {
     expect(chain.allowance).not.toHaveBeenCalled();
   });
 
+  it.each([
+    '/api/v1/token/metadata',
+    `/api/v1/token/balance?address=${owner}`,
+    `/api/v1/token/allowance?owner=${owner}&spender=${recipient}`,
+    '/health/live',
+    '/health/ready',
+  ])('rejects request bodies on read route %s', async (route) => {
+    const response = await request(app.getHttpServer())
+      .get(route)
+      .send({ privateKey: 'untrusted-marker' })
+      .expect(400);
+    expect(response.body).toEqual({
+      error: {
+        code: 'VALIDATION_ERROR',
+        message: 'Request validation failed',
+      },
+    });
+    expect(response.text).not.toContain('untrusted-marker');
+    expect(chain.metadata).not.toHaveBeenCalled();
+    expect(chain.balance).not.toHaveBeenCalled();
+    expect(chain.allowance).not.toHaveBeenCalled();
+    expect(chain.ready).not.toHaveBeenCalled();
+    expect(chain.execute).not.toHaveBeenCalled();
+  });
+
+  it('rejects a HEAD request body before the token controller', async () => {
+    const body = '{"privateKey":"untrusted-marker"}';
+    const response = await request(app.getHttpServer())
+      .head('/api/v1/token/metadata')
+      .set('Content-Type', 'application/json')
+      .set('Content-Length', String(Buffer.byteLength(body)))
+      .send(body)
+      .expect(400);
+    expect(response.text).toBeUndefined();
+    expect(chain.metadata).not.toHaveBeenCalled();
+    expect(chain.execute).not.toHaveBeenCalled();
+  });
+
+  it('rejects chunked read bodies without inspecting their contents', async () => {
+    const pending = request(app.getHttpServer())
+      .get('/api/v1/token/metadata')
+      .set('Content-Type', 'text/plain')
+      .set('Transfer-Encoding', 'chunked');
+    pending.write('untrusted-marker');
+    const response = await pending.expect(400);
+    expect(response.body).toEqual({
+      error: {
+        code: 'VALIDATION_ERROR',
+        message: 'Request validation failed',
+      },
+    });
+    expect(response.text).not.toContain('untrusted-marker');
+    expect(chain.metadata).not.toHaveBeenCalled();
+    expect(chain.execute).not.toHaveBeenCalled();
+  });
+
   it.each(['/api/v1/token/metadata', '/health/live', '/health/ready'])(
     'rejects unexpected query input on %s',
     async (route) => {
